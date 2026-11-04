@@ -1,0 +1,20 @@
+name: build
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Build
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core update-index
+          arduino-cli core install rp2040:rp2040
+          arduino-cli lib install "Adafruit TinyUSB Library"
+          arduino-cli compile --fqbn rp2040:rp2040:waveshare_rp2040_zero:usbstack=tinyusb --output-dir out battery
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/*.uf2

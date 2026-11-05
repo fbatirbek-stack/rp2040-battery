@@ -123,15 +123,14 @@ void set_report_cb(uint8_t report_id, hid_report_type_t report_type,
 }
 
 void setup() {
-  // 1. USB Donanım Kimliği Maskelemesi (En kritik adım: Raspberry Pi/Adafruit izlerini siler)
-  // Bu VID (0x051D) ve PID (0x0002) standart fiziksel UPS denetleyicilerine aittir.
+  // Tarafsız Güvenli Kimlik (Sürücü çökmesini engelleyen jenerik HID VID/PID)
   TinyUSBDevice.setID(0x2000, 0x0001);
-  
-  // 2. Üretici ve Ürün İsimleri Doğrudan Powerful SLE-2000 olarak atandı
+
+  // Üretici ve Ürün İsimleri
   TinyUSBDevice.setManufacturerDescriptor("Powerful");
   TinyUSBDevice.setProductDescriptor("SLE-2000 2.000 VA Line");
 
-  // 3. Fiziksel Çip numarasını gizleyip Standart UPS seri numarası formatı basıldı
+  // Fiziksel Çip Numarasını Standart Seri Numarasıyla Maskeleme
   TinyUSBDevice.setSerialDescriptor("PW2024SLE001");
 
   usb_hid.setPollInterval(10);
@@ -153,7 +152,7 @@ void setup() {
   setStore8(HID_PD_REMAININGCAPACITY, 100);   
   setStore8(HID_PD_WARNCAPACITYLIMIT, 20);
   setStore8(HID_PD_REMNCAPACITYLIMIT, 10);
-  setStore16(HID_PD_MANUFACTUREDATE, (2024 - 1980) * 512 + 1 * 32 + 1); // 2024 Üretimi
+  setStore16(HID_PD_MANUFACTUREDATE, (2024 - 1980) * 512 + 1 * 32 + 1);
   setStore16(HID_PD_AVERAGETIME2FULL, 0);
   setStore16(HID_PD_AVERAGETIME2EMPTY, 3600); 
   setStore16(HID_PD_RUNTIMETOEMPTY, 3600);
@@ -161,20 +160,32 @@ void setup() {
   setStore16(HID_PD_DELAYBE4SHUTDOWN, (uint16_t)-1);
   setStore16(HID_PD_DELAYBE4REBOOT, (uint16_t)-1);
   
-  // 4. 2000VA UPS'ler 24V (2400mV) sistem kullanır, tamamen gerçekçi veriler atandı
+  // Başlangıç Voltajları
   setStore16(HID_PD_CONFIGVOLTAGE, 2400);     
   setStore16(HID_PD_VOLTAGE, 2400);           
   setStore8(HID_PD_AUDIBLEALARMCTRL, 2);
   
-  // PresentStatus: Fişe takılı ve şarj dolu
+  // PresentStatus: Fişe takılı
   setStore16(HID_PD_PRESENTSTATUS, 0x010C);
 }
 
 void loop() {
   if (TinyUSBDevice.mounted() && usb_hid.ready()) {
+    
+    // 1. Kapasite Dalgalanması (Noise): Çoğunlukla %100, nadiren %99 raporlar
+    uint8_t current_capacity = (random(0, 100) > 95) ? 99 : 100;
+    setStore8(HID_PD_REMAININGCAPACITY, current_capacity);
+
+    // 2. Voltaj Dalgalanması: 24V (2400mV) etrafında 2390mV ile 2410mV arası doğal sapma
+    uint16_t current_voltage = random(2390, 2411);
+    setStore16(HID_PD_VOLTAGE, current_voltage);
+
+    // Güncel verileri sisteme bildir
     usb_hid.sendReport(HID_PD_PRESENTSTATUS, storeData[HID_PD_PRESENTSTATUS], 2);
     delay(20);
     usb_hid.sendReport(HID_PD_REMAININGCAPACITY, storeData[HID_PD_REMAININGCAPACITY], 1);
+    delay(20);
+    usb_hid.sendReport(HID_PD_VOLTAGE, storeData[HID_PD_VOLTAGE], 2);
   }
-  delay(2000);
+  delay(2000); // Raporlama döngüsü
 }

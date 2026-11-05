@@ -123,14 +123,9 @@ void set_report_cb(uint8_t report_id, hid_report_type_t report_type,
 }
 
 void setup() {
-  // Tarafsız Güvenli Kimlik (Sürücü çökmesini engelleyen jenerik HID VID/PID)
   TinyUSBDevice.setID(0x2000, 0x0001);
-
-  // Üretici ve Ürün İsimleri
   TinyUSBDevice.setManufacturerDescriptor("Powerful");
   TinyUSBDevice.setProductDescriptor("SLE-2000 2.000 VA Line");
-
-  // Fiziksel Çip Numarasını Standart Seri Numarasıyla Maskeleme
   TinyUSBDevice.setSerialDescriptor("PW2024SLE001");
 
   usb_hid.setPollInterval(10);
@@ -159,33 +154,70 @@ void setup() {
   setStore16(HID_PD_REMAINTIMELIMIT, 600);    
   setStore16(HID_PD_DELAYBE4SHUTDOWN, (uint16_t)-1);
   setStore16(HID_PD_DELAYBE4REBOOT, (uint16_t)-1);
-  
-  // Başlangıç Voltajları
   setStore16(HID_PD_CONFIGVOLTAGE, 2400);     
   setStore16(HID_PD_VOLTAGE, 2400);           
   setStore8(HID_PD_AUDIBLEALARMCTRL, 2);
   
-  // PresentStatus: Fişe takılı
+  // Varsayılan: Fişe takılı ve Tam Dolu (AC + Batt + Full)
   setStore16(HID_PD_PRESENTSTATUS, 0x010C);
 }
 
+// Yaşam Döngüsü Değişkenleri
+static int cycle_counter = 0;
+static int ops_state = 0; // 0: Normal Şebeke, 1: Self-Test (Elektrik Kesintisi), 2: Şarj Oluyor
+
 void loop() {
   if (TinyUSBDevice.mounted() && usb_hid.ready()) {
-    
-    // 1. Kapasite Dalgalanması (Noise): Çoğunlukla %100, nadiren %99 raporlar
-    uint8_t current_capacity = (random(0, 100) > 95) ? 99 : 100;
-    setStore8(HID_PD_REMAININGCAPACITY, current_capacity);
+    cycle_counter++;
+    uint16_t current_status = 0x010C; 
+    uint8_t current_capacity = 100;
+    uint16_t current_voltage = 2400;
 
-    // 2. Voltaj Dalgalanması: 24V (2400mV) etrafında 2390mV ile 2410mV arası doğal sapma
-    uint16_t current_voltage = random(2390, 2411);
+    // Durum 0: Normal Şebeke Akışı
+    if (ops_state == 0) {
+      current_status = 0x010C; // AC (0x04) + Batt (0x08) + Full (0x100)
+      current_capacity = 100;
+      current_voltage = random(2395, 2405); // Hafif dalgalanma
+      
+      if (cycle_counter > 300) { // Yaklaşık 10 dakikada bir (300 x 2 sn)
+        ops_state = 1; // Self-Test moduna geç
+        cycle_counter = 0;
+      }
+    } 
+    // Durum 1: AC Şebeke Kesintisi (Self-Test / Aküye Geçiş)
+    else if (ops_state == 1) {
+      current_status = 0x0028; // AC Yok! Sadece Batt (0x08) + Discharging (0x20)
+      current_capacity = 99;
+      current_voltage = random(2300, 2350); // Akü yüke bindiği için voltaj düşer
+      
+      if (cycle_counter > 5) { // 10 saniyelik test (5 x 2 sn)
+        ops_state = 2; // Şebeke geldi, şarja geç
+        cycle_counter = 0;
+      }
+    } 
+    // Durum 2: Şebeke Geri Geldi (Şarj Oluyor)
+    else if (ops_state == 2) {
+      current_status = 0x001C; // AC (0x04) + Batt (0x08) + Charging (0x10)
+      current_capacity = 99;
+      current_voltage = random(2410, 2430); // Şarj olduğu için voltaj yükselir
+      
+      if (cycle_counter > 15) { // 30 saniye şarjda kalır (15 x 2 sn)
+        ops_state = 0; // Batarya doldu, normale dön
+        cycle_counter = 0;
+      }
+    }
+
+    // Sisteme verileri kaydet
+    setStore16(HID_PD_PRESENTSTATUS, current_status);
+    setStore8(HID_PD_REMAININGCAPACITY, current_capacity);
     setStore16(HID_PD_VOLTAGE, current_voltage);
 
-    // Güncel verileri sisteme bildir
+    // Windows'a anlık durumu bildir
     usb_hid.sendReport(HID_PD_PRESENTSTATUS, storeData[HID_PD_PRESENTSTATUS], 2);
     delay(20);
     usb_hid.sendReport(HID_PD_REMAININGCAPACITY, storeData[HID_PD_REMAININGCAPACITY], 1);
     delay(20);
     usb_hid.sendReport(HID_PD_VOLTAGE, storeData[HID_PD_VOLTAGE], 2);
   }
-  delay(2000); // Raporlama döngüsü
+  delay(2000); // 2 saniyelik ana döngü
 }

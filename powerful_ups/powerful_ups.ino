@@ -125,8 +125,8 @@ void set_report_cb(uint8_t report_id, hid_report_type_t report_type,
 void setup() {
   // 1. USB Donanım Kimliği Maskelemesi (En kritik adım: Raspberry Pi/Adafruit izlerini siler)
   // Bu VID (0x051D) ve PID (0x0002) standart fiziksel UPS denetleyicilerine aittir.
-  TinyUSBDevice.setID(0x051D, 0x0002);
-
+  TinyUSBDevice.setID(0x2000, 0x0001);
+  
   // 2. Üretici ve Ürün İsimleri Doğrudan Powerful SLE-2000 olarak atandı
   TinyUSBDevice.setManufacturerDescriptor("Powerful");
   TinyUSBDevice.setProductDescriptor("SLE-2000 2.000 VA Line");

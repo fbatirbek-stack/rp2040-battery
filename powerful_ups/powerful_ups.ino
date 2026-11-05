@@ -165,6 +165,7 @@ void setup() {
 // Yaşam Döngüsü Değişkenleri
 static int cycle_counter = 0;
 static int ops_state = 0; // 0: Normal Şebeke, 1: Self-Test (Elektrik Kesintisi), 2: Şarj Oluyor
+static int next_test_cycle = 900; // İlk test için rastgele olmayan başlangıç süresi (30 Dk)
 
 void loop() {
   if (TinyUSBDevice.mounted() && usb_hid.ready()) {
@@ -179,7 +180,7 @@ void loop() {
       current_capacity = 100;
       current_voltage = random(2395, 2405); // Hafif dalgalanma
       
-      if (cycle_counter > 300) { // Yaklaşık 10 dakikada bir (300 x 2 sn)
+      if (cycle_counter > next_test_cycle) { 
         ops_state = 1; // Self-Test moduna geç
         cycle_counter = 0;
       }
@@ -204,6 +205,9 @@ void loop() {
       if (cycle_counter > 15) { // 30 saniye şarjda kalır (15 x 2 sn)
         ops_state = 0; // Batarya doldu, normale dön
         cycle_counter = 0;
+        
+        // BİR SONRAKİ DÖNGÜ İÇİN YENİ RASTGELE SÜRE (25 ile 55 Dakika arası)
+        next_test_cycle = random(750, 1651); 
       }
     }
 
